@@ -28,7 +28,7 @@ const LANGUAGES = [
 ];
 
 const TEXTS: Record<string, any> = {
-  ko: { title: "AI 스마트 설문 제작 플랫폼", subtitle: "시작 전 사용할 언어를 선택하고, 원하는 제작 방식을 골라주세요.", selectLabel: "전체 서비스 언어 선택:", startBtn: "시작하기", mode1Title: "주제와 대상 입력으로\n설문 자동 생성", mode2Title: "텍스트 입력", mode3Title: "문서 파일(Hwp, Doc, PDF)\n업로드 변환" },
+  ko: { title: "Q&S (Quiz & Survey) AI 생성 플랫폼  ", subtitle: "시작 전 사용할 언어를 선택하고, 원하는 제작 방식을 골라주세요.", selectLabel: "전체 서비스 언어 선택:", startBtn: "시작하기", mode1Title: "주제와 대상 입력으로\n설문 자동 생성", mode2Title: "텍스트 입력", mode3Title: "문서 파일(Hwp, Doc, PDF)\n업로드 변환" },
   en: { title: "AI Smart Survey Creation Platform", subtitle: "Select your target language below and choose a creation method to get started.", selectLabel: "Select Service Language:", startBtn: "Get Started", mode1Title: "Auto-Generate Survey\nby Topic & Target", mode2Title: "Text Input", mode3Title: "Document Upload\n(Hwp, Doc, PDF)" },
   ja: { title: "AIスマートアンケート作成プラットフォーム", subtitle: "使用する言語を選択し、ご希望の作成方法をお選びください。", selectLabel: "サービス言語の選択:", startBtn: "始める", mode1Title: "テーマと対象入力で\nアンケート自動生成", mode2Title: "テキスト入力", mode3Title: "文書ファイル変換\n(Hwp, Doc, PDF)" },
   zh: { title: "AI智能问卷生成平台", subtitle: "请在开始前选择您要使用的语言，并选择您需要的创建方式。", selectLabel: "选择服务语言:", startBtn: "开始", mode1Title: "输入主题和对象\n自动生成问卷", mode2Title: "输入文本", mode3Title: "上传文档\n(Hwp, Doc, PDF)" },
