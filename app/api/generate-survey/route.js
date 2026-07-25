@@ -12,26 +12,20 @@ export async function POST(request) {
     const ai = new GoogleGenAI({ apiKey });
     const body = await request.json();
     
-    // 💡 수정됨: 프론트엔드에서 보내는 mcqType(객관식 유형) 추가
     const { topic, target, draftText, fileBase64, mimeType, mcqType, mcqCount, subjectiveCount, lang } = body;
 
-    // 전달받은 데이터(모드)에 따라 프롬프트 문맥 동적 변경
     let sourceDescription = "";
     let textSection = "";
 
     if (topic && target) {
-      // 모드 1: 주제와 대상이 있는 경우
       sourceDescription = `the topic "${topic}" and target audience "${target}"`;
     } else if (fileBase64) {
-      // 모드 3: 첨부 파일이 있는 경우
       sourceDescription = "the attached document";
     } else {
-      // 모드 2: 텍스트(초안)가 있는 경우
       sourceDescription = "the following draft text";
       textSection = draftText ? `\n--- DRAFT TEXT ---\n${draftText}\n------------------\n` : "";
     }
 
-    // 💡 수정됨: mcqType에 따라 객관식 보기 생성 지시어 동적 생성
     let mcqInstruction = "";
     if (mcqType === "ox") {
       mcqInstruction = 'provide exactly 2 options (e.g., "O/X", "True/False", "Yes/No" appropriately translated in the requested language).';
@@ -55,6 +49,7 @@ export async function POST(request) {
       2. For multiple-choice questions (type: "mcq"), ${mcqInstruction}
       3. For subjective questions (type: "subjective"), omit the "options" field or leave it as an empty array [].
       4. Return the output STRICTLY in valid JSON format. Do not include any markdown formatting like \`\`\`json.
+      5. Do not add any extra characters, trailing commas, or additional brackets outside the root JSON object.
 
       JSON structure format:
       {
@@ -77,7 +72,6 @@ export async function POST(request) {
 
     const parts = [{ text: promptText }];
     
-    // 파일 데이터가 넘어오면 inlineData로 추가
     if (fileBase64 && mimeType) {
       parts.push({
         inlineData: {
@@ -87,7 +81,7 @@ export async function POST(request) {
       });
     }
 
-    // Gemini API 호출
+    // 원래 잘 작동하던 모델명 유지
     const response = await ai.models.generateContent({
       model: 'gemini-3.5-flash',
       contents: parts,
@@ -97,13 +91,49 @@ export async function POST(request) {
     });
 
     let rawText = response.text || "";
-    rawText = rawText.replace(/```json/i, '').replace(/```/g, '').trim();
-    const surveyData = JSON.parse(rawText);
+
+    // 1. 마크다운 제거
+    rawText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+    // 2. 가장 바깥쪽 { ... } 만 추출 (여분의 ] 나 다른 텍스트 제거)
+    const firstBrace = rawText.indexOf('{');
+    const lastBrace = rawText.lastIndexOf('}');
+    
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      rawText = rawText.substring(firstBrace, lastBrace + 1);
+    }
+
+    // 3. trailing comma 제거 (}, ] 앞에 있는 ,)
+    rawText = rawText.replace(/,\s*([}\]])/g, '$1');
+
+    let surveyData;
+    try {
+      surveyData = JSON.parse(rawText);
+    } catch (error) {
+      console.error("JSON 파싱 에러 발생:", error);
+      console.error("문제가 된 텍스트 원본:", rawText);
+      
+      return NextResponse.json(
+        { success: false, error: "AI가 올바른 형식(JSON)으로 응답하지 않았습니다. 다시 시도해 주세요." },
+        { status: 500 } 
+      );
+    }
+
+    // 기본 검증
+    if (!surveyData || !Array.isArray(surveyData.questions)) {
+      return NextResponse.json(
+        { success: false, error: "생성된 설문 데이터 형식이 올바르지 않습니다." },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({ success: true, data: surveyData });
-    
+
   } catch (error) {
-    console.error('Gemini API Error Detail:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    console.error("서버 내부 오류 발생:", error);
+    return NextResponse.json(
+      { success: false, error: "서버 통신 중 오류가 발생했습니다." },
+      { status: 500 }
+    );
   }
 }

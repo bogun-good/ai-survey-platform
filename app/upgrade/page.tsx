@@ -5,10 +5,10 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { UploadCloud, AlertCircle, Copy, Check, QrCode, Download } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 
-// 20개 언어 지원을 위한 TEXTS 객체 확장
+// 지원 파일 형식 문구를 'Hwp, Doc, PDF'로 통일
 const TEXTS: Record<string, any> = {
   ko: { 
-    back: "메인으로 돌아가기", title: "문서 파일 업로드 변환", filePh: "클릭하여 문서를 첨부하세요 (PDF, TXT, MD, CSV)", 
+    back: "메인으로 돌아가기", title: "문서 파일(Hwp, Doc, PDF) 업로드 변환", filePh: "클릭하여 문서를 첨부하세요 (Hwp, Doc, PDF)", 
     topicLabel: "퀴즈/설문 주제", topicPh: "예: 파일 내용 기반 핵심 개념 확인",
     targetLabel: "대상", targetPh: "예: 중학교 1학년",
     obj: "객관식 문항 수", mcqTypeLabel: "객관식 유형", mcqTypeOX: "O/X형", mcqType4: "4지 선다형", mcqType5: "5지 선다형",
@@ -21,7 +21,7 @@ const TEXTS: Record<string, any> = {
     qObj: "[객관식]", qSubj: "[주관식]"
   },
   en: { 
-    back: "Back to Main", title: "Document File Conversion", filePh: "Click to attach document (PDF, TXT, MD, CSV)", 
+    back: "Back to Main", title: "Document File (Hwp, Doc, PDF) Conversion", filePh: "Click to attach document (Hwp, Doc, PDF)", 
     topicLabel: "Quiz/Survey Topic", topicPh: "e.g., Key concepts from the file",
     targetLabel: "Target Audience", targetPh: "e.g., 7th Grade Students",
     obj: "Multiple Choice", mcqTypeLabel: "MCQ Type", mcqTypeOX: "True/False (O/X)", mcqType4: "4 Options", mcqType5: "5 Options",
@@ -34,7 +34,7 @@ const TEXTS: Record<string, any> = {
     qObj: "[Multiple Choice]", qSubj: "[Open-ended]"
   },
   ja: { 
-    back: "メインに戻る", title: "文書ファイル変換", filePh: "クリックして文書を添付 (PDF, TXT, MD, CSV)", 
+    back: "メインに戻る", title: "文書ファイル(Hwp, Doc, PDF)変換", filePh: "クリックして文書を添付 (Hwp, Doc, PDF)", 
     topicLabel: "クイズ/アンケートのテーマ", topicPh: "例: ファイルに基づく主要概念の確認",
     targetLabel: "対象", targetPh: "例: 中学1年生",
     obj: "選択式", mcqTypeLabel: "選択式の種類", mcqTypeOX: "マルバツ (O/X)", mcqType4: "4択", mcqType5: "5択",
@@ -44,7 +44,7 @@ const TEXTS: Record<string, any> = {
     preview: "📋 プレビュー", shareTitle: "🚀 アンケート共有", copyLink: "リンクをコピー", copied: "コピー完了!", downloadQr: "QRコードをダウンロード", qObj: "[選択式]", qSubj: "[記述式]" 
   },
   zh: { 
-    back: "返回主页", title: "上传文档转换", filePh: "点击上传文档 (支持 PDF, TXT, MD, CSV)", 
+    back: "返回主页", title: "上传文档 (Hwp, Doc, PDF) 转换", filePh: "点击上传文档 (支持 Hwp, Doc, PDF)", 
     topicLabel: "测验/问卷主题", topicPh: "例如: 基于附件内容的核心概念",
     targetLabel: "目标受众", targetPh: "例如: 初一学生",
     obj: "客观题", mcqTypeLabel: "题型选项", mcqTypeOX: "判断题 (O/X)", mcqType4: "4个选项", mcqType5: "5个选项",
@@ -54,7 +54,7 @@ const TEXTS: Record<string, any> = {
     preview: "📋 问卷预览", shareTitle: "🚀 分享问卷", copyLink: "复制问卷链接", copied: "已复制!", downloadQr: "下载二维码", qObj: "[客观题]", qSubj: "[主观题]" 
   },
   vi: { 
-    back: "Quay lại", title: "Chuyển đổi tài liệu", filePh: "Nhấp để đính kèm tài liệu", 
+    back: "Quay lại", title: "Chuyển đổi tài liệu (Hwp, Doc, PDF)", filePh: "Nhấp để đính kèm tài liệu (Hwp, Doc, PDF)", 
     topicLabel: "Chủ đề", topicPh: "Vd: Các khái niệm chính", targetLabel: "Đối tượng", targetPh: "Vd: Học sinh lớp 7",
     obj: "Trắc nghiệm", mcqTypeLabel: "Loại trắc nghiệm", mcqTypeOX: "Đúng/Sai (O/X)", mcqType4: "4 lựa chọn", mcqType5: "5 lựa chọn",
     subj: "Tự luận", btn: "Tạo {n} câu hỏi", loading: "Đang tạo...", alertTopic: "Nhập chủ đề.", alertTarget: "Nhập đối tượng.",
@@ -62,7 +62,7 @@ const TEXTS: Record<string, any> = {
     copyLink: "Sao chép liên kết", copied: "Đã sao chép!", downloadQr: "Tải QR", qObj: "[Trắc nghiệm]", qSubj: "[Tự luận]"
   },
   es: { 
-    back: "Volver", title: "Conversión de Documentos", filePh: "Clic para adjuntar (PDF, TXT, MD, CSV)", 
+    back: "Volver", title: "Conversión de Documentos (Hwp, Doc, PDF)", filePh: "Clic para adjuntar (Hwp, Doc, PDF)", 
     topicLabel: "Tema", topicPh: "Ej: Conceptos clave", targetLabel: "Audiencia", targetPh: "Ej: Estudiantes",
     obj: "Opción múltiple", mcqTypeLabel: "Tipo de opciones", mcqTypeOX: "Verdadero/Falso (O/X)", mcqType4: "4 Opciones", mcqType5: "5 Opciones",
     subj: "Abiertas", btn: "Generar {n} preguntas", loading: "Generando...", alertTopic: "Ingrese un tema.", alertTarget: "Ingrese audiencia.",
@@ -70,7 +70,7 @@ const TEXTS: Record<string, any> = {
     shareTitle: "Compartir", copyLink: "Copiar enlace", copied: "¡Copiado!", downloadQr: "Descargar QR", qObj: "[Opción múltiple]", qSubj: "[Abierta]"
   },
   fr: { 
-    back: "Retour", title: "Conversion de documents", filePh: "Cliquez pour joindre", 
+    back: "Retour", title: "Conversion de documents (Hwp, Doc, PDF)", filePh: "Cliquez pour joindre (Hwp, Doc, PDF)", 
     topicLabel: "Sujet", topicPh: "Ex: Concepts clés", targetLabel: "Public cible", targetPh: "Ex: Étudiants",
     obj: "Choix multiple", mcqTypeLabel: "Type de QCM", mcqTypeOX: "Vrai/Faux (O/X)", mcqType4: "4 Options", mcqType5: "5 Options",
     subj: "Ouverte", btn: "Générer {n} questions", loading: "Génération...", alertTopic: "Entrez un sujet.", alertTarget: "Entrez le public.",
@@ -78,7 +78,7 @@ const TEXTS: Record<string, any> = {
     shareTitle: "Partager", copyLink: "Copier le lien", copied: "Copié !", downloadQr: "Télécharger QR", qObj: "[QCM]", qSubj: "[Ouverte]"
   },
   de: { 
-    back: "Zurück", title: "Dokumentenkonvertierung", filePh: "Klicken zum Anhängen", 
+    back: "Zurück", title: "Dokumentenkonvertierung (Hwp, Doc, PDF)", filePh: "Klicken zum Anhängen (Hwp, Doc, PDF)", 
     topicLabel: "Thema", topicPh: "Z.B.: Schlüsselkonzepte", targetLabel: "Zielgruppe", targetPh: "Z.B.: Studenten",
     obj: "Multiple Choice", mcqTypeLabel: "MC-Typ", mcqTypeOX: "Wahr/Falsch (O/X)", mcqType4: "4 Optionen", mcqType5: "5 Optionen",
     subj: "Offene Fragen", btn: "{n} Fragen generieren", loading: "Generiere...", alertTopic: "Thema eingeben.", alertTarget: "Zielgruppe eingeben.",
@@ -86,7 +86,7 @@ const TEXTS: Record<string, any> = {
     shareTitle: "Teilen", copyLink: "Link kopieren", copied: "Kopiert!", downloadQr: "QR herunterladen", qObj: "[Multiple Choice]", qSubj: "[Offen]"
   },
   ru: { 
-    back: "Назад", title: "Конвертация документов", filePh: "Нажмите, чтобы прикрепить", 
+    back: "Назад", title: "Конвертация документов (Hwp, Doc, PDF)", filePh: "Нажмите, чтобы прикрепить (Hwp, Doc, PDF)", 
     topicLabel: "Тема", topicPh: "Например: Ключевые концепции", targetLabel: "Аудитория", targetPh: "Например: Студенты",
     obj: "Тест", mcqTypeLabel: "Тип теста", mcqTypeOX: "Правда/Ложь (O/X)", mcqType4: "4 Варианта", mcqType5: "5 Вариантов",
     subj: "Открытые", btn: "Создать {n} вопросов", loading: "Создание...", alertTopic: "Введите тему.", alertTarget: "Введите аудиторию.",
@@ -94,7 +94,7 @@ const TEXTS: Record<string, any> = {
     shareTitle: "Поделиться", copyLink: "Копировать ссылку", copied: "Скопировано!", downloadQr: "Скачать QR", qObj: "[Тест]", qSubj: "[Открытый]"
   },
   ar: { 
-    back: "رجوع", title: "تحويل المستند", filePh: "انقر لإرفاق مستند", 
+    back: "رجوع", title: "تحويل المستند (Hwp, Doc, PDF)", filePh: "انقر لإرفاق مستند (Hwp, Doc, PDF)", 
     topicLabel: "الموضوع", topicPh: "مثال: المفاهيم الرئيسية", targetLabel: "الجمهور", targetPh: "مثال: الطلاب",
     obj: "خيارات متعددة", mcqTypeLabel: "نوع الخيارات", mcqTypeOX: "صح/خطأ (O/X)", mcqType4: "4 خيارات", mcqType5: "5 خيارات",
     subj: "أسئلة مقالية", btn: "إنشاء {n} أسئلة", loading: "جاري الإنشاء...", alertTopic: "أدخل الموضوع.", alertTarget: "أدخل الجمهور.",
@@ -102,7 +102,7 @@ const TEXTS: Record<string, any> = {
     shareTitle: "مشاركة", copyLink: "نسخ الرابط", copied: "تم النسخ!", downloadQr: "تحميل QR", qObj: "[خيارات متعددة]", qSubj: "[مقالي]"
   },
   pt: { 
-    back: "Voltar", title: "Conversão de Documentos", filePh: "Clique para anexar", 
+    back: "Voltar", title: "Conversão de Documentos (Hwp, Doc, PDF)", filePh: "Clique para anexar (Hwp, Doc, PDF)", 
     topicLabel: "Tópico", topicPh: "Ex: Conceitos chave", targetLabel: "Público", targetPh: "Ex: Alunos",
     obj: "Múltipla escolha", mcqTypeLabel: "Tipo de múltipla escolha", mcqTypeOX: "Verdadeiro/Falso (O/X)", mcqType4: "4 Opções", mcqType5: "5 Opções",
     subj: "Dissertativa", btn: "Gerar {n} perguntas", loading: "Gerando...", alertTopic: "Insira o tópico.", alertTarget: "Insira o público.",
@@ -110,7 +110,7 @@ const TEXTS: Record<string, any> = {
     shareTitle: "Compartilhar", copyLink: "Copiar link", copied: "Copiado!", downloadQr: "Baixar QR", qObj: "[Múltipla escolha]", qSubj: "[Dissertativa]"
   },
   id: { 
-    back: "Kembali", title: "Konversi Dokumen", filePh: "Klik untuk melampirkan dokumen", 
+    back: "Kembali", title: "Konversi Dokumen (Hwp, Doc, PDF)", filePh: "Klik untuk melampirkan dokumen (Hwp, Doc, PDF)", 
     topicLabel: "Topik", topicPh: "Contoh: Konsep utama", targetLabel: "Target", targetPh: "Contoh: Siswa",
     obj: "Pilihan ganda", mcqTypeLabel: "Tipe Pilihan Ganda", mcqTypeOX: "Benar/Salah (O/X)", mcqType4: "4 Pilihan", mcqType5: "5 Pilihan",
     subj: "Esai", btn: "Buat {n} pertanyaan", loading: "Membuat...", alertTopic: "Masukkan topik.", alertTarget: "Masukkan target.",
@@ -118,7 +118,7 @@ const TEXTS: Record<string, any> = {
     shareTitle: "Bagikan", copyLink: "Salin Tautan", copied: "Tersalin!", downloadQr: "Unduh QR", qObj: "[Pilihan Ganda]", qSubj: "[Esai]"
   },
   hi: { 
-    back: "वापस", title: "दस्तावेज़ रूपांतरण", filePh: "दस्तावेज़ संलग्न करें", 
+    back: "वापस", title: "दस्तावेज़ रूपांतरण (Hwp, Doc, PDF)", filePh: "दस्तावेज़ संलग्न करें (Hwp, Doc, PDF)", 
     topicLabel: "विषय", topicPh: "उदाहरण: मुख्य अवधारणाएं", targetLabel: "लक्षित दर्शक", targetPh: "उदाहरण: छात्र",
     obj: "बहुविकल्पीय", mcqTypeLabel: "विकल्प प्रकार", mcqTypeOX: "सही/गलत (O/X)", mcqType4: "4 विकल्प", mcqType5: "5 विकल्प",
     subj: "विषयपरक", btn: "{n} प्रश्न बनाएं", loading: "बन रहा है...", alertTopic: "विषय दर्ज करें।", alertTarget: "दर्शक दर्ज करें।",
@@ -126,7 +126,7 @@ const TEXTS: Record<string, any> = {
     shareTitle: "साझा करें", copyLink: "लिंक कॉपी करें", copied: "कॉपी किया गया!", downloadQr: "QR डाउनलोड करें", qObj: "[बहुविकल्पीय]", qSubj: "[विषयपरक]"
   },
   th: { 
-    back: "กลับ", title: "แปลงไฟล์เอกสาร", filePh: "คลิกเพื่อแนบเอกสาร", 
+    back: "กลับ", title: "แปลงไฟล์เอกสาร (Hwp, Doc, PDF)", filePh: "คลิกเพื่อแนบเอกสาร (Hwp, Doc, PDF)", 
     topicLabel: "หัวข้อ", topicPh: "เช่น: แนวคิดหลัก", targetLabel: "กลุ่มเป้าหมาย", targetPh: "เช่น: นักเรียน",
     obj: "ปรนัย", mcqTypeLabel: "ประเภทตัวเลือก", mcqTypeOX: "ถูก/ผิด (O/X)", mcqType4: "4 ตัวเลือก", mcqType5: "5 ตัวเลือก",
     subj: "อัตนัย", btn: "สร้าง {n} คำถาม", loading: "กำลังสร้าง...", alertTopic: "ป้อนหัวข้อ", alertTarget: "ป้อนกลุ่มเป้าหมาย",
@@ -134,7 +134,7 @@ const TEXTS: Record<string, any> = {
     shareTitle: "แชร์", copyLink: "คัดลอกลิงก์", copied: "คัดลอกแล้ว!", downloadQr: "ดาวน์โหลด QR", qObj: "[ปรนัย]", qSubj: "[อัตนัย]"
   },
   fil: { 
-    back: "Bumalik", title: "Conversion ng Dokumento", filePh: "I-click para mag-attach", 
+    back: "Bumalik", title: "Conversion ng Dokumento (Hwp, Doc, PDF)", filePh: "I-click para mag-attach (Hwp, Doc, PDF)", 
     topicLabel: "Paksa", topicPh: "Halimbawa: Pangunahing konsepto", targetLabel: "Audience", targetPh: "Halimbawa: Mga Estudyante",
     obj: "Multiple Choice", mcqTypeLabel: "Uri ng Multiple Choice", mcqTypeOX: "Tama/Mali (O/X)", mcqType4: "4 na Pagpipilian", mcqType5: "5 na Pagpipilian",
     subj: "Sanaysay", btn: "Bumuo ng {n} tanong", loading: "Binubuo...", alertTopic: "Ilagay ang paksa.", alertTarget: "Ilagay ang audience.",
@@ -142,15 +142,15 @@ const TEXTS: Record<string, any> = {
     shareTitle: "Ibahagi", copyLink: "Kopyahin ang Link", copied: "Nakopya!", downloadQr: "I-download ang QR", qObj: "[Multiple Choice]", qSubj: "[Sanaysay]"
   },
   tr: { 
-    back: "Geri", title: "Belge Dönüştürme", filePh: "Belge eklemek için tıklayın", 
+    back: "Geri", title: "Belge Dönüştürme (Hwp, Doc, PDF)", filePh: "Belge eklemek için tıklayın (Hwp, Doc, PDF)", 
     topicLabel: "Konu", topicPh: "Ör: Temel kavramlar", targetLabel: "Hedef Kitle", targetPh: "Ör: Öğrenciler",
     obj: "Çoktan Seçmeli", mcqTypeLabel: "Seçenek Türü", mcqTypeOX: "Doğru/Yanlış (O/X)", mcqType4: "4 Seçenekli", mcqType5: "5 Seçenekli",
     subj: "Açık Uçlu", btn: "{n} Soru Oluştur", loading: "Oluşturuluyor...", alertTopic: "Konu girin.", alertTarget: "Kitle girin.",
     alert1: "Dosya yükleyin.", alert2: "En az 1 soru.", apiError: "Hata oluştu.", preview: "Önizleme", 
-    shareTitle: "Paylaş", copyLink: "Bağlantıyı Kopyala", copied: "Kopyalandı!", downloadQr: "QR İndir", qObj: "[Çoktan Seçmeli]", qSubj: "[Açık Uçlu]"
+    shareTitle: "Paylaş", copyLink: "Bağlantıyı Kopyala", copied: "Kopyerildi!", downloadQr: "QR İndir", qObj: "[Çoktan Seçmeli]", qSubj: "[Açık Uçlu]"
   },
   it: { 
-    back: "Indietro", title: "Conversione Documento", filePh: "Clicca per allegare", 
+    back: "Indietro", title: "Conversione Documento (Hwp, Doc, PDF)", filePh: "Clicca per allegare (Hwp, Doc, PDF)", 
     topicLabel: "Argomento", topicPh: "Es: Concetti chiave", targetLabel: "Destinatari", targetPh: "Es: Studenti",
     obj: "Scelta multipla", mcqTypeLabel: "Tipo di scelta multipla", mcqTypeOX: "Vero/Falso (O/X)", mcqType4: "4 Opzioni", mcqType5: "5 Opzioni",
     subj: "Aperte", btn: "Genera {n} domande", loading: "Generazione in corso...", alertTopic: "Inserisci argomento.", alertTarget: "Inserisci destinatari.",
@@ -158,7 +158,7 @@ const TEXTS: Record<string, any> = {
     shareTitle: "Condividi", copyLink: "Copia Link", copied: "Copiato!", downloadQr: "Scarica QR", qObj: "[Scelta multipla]", qSubj: "[Aperta]"
   },
   nl: { 
-    back: "Terug", title: "Document Conversie", filePh: "Klik om bij te voegen", 
+    back: "Terug", title: "Document Conversie (Hwp, Doc, PDF)", filePh: "Klik om bij te voegen (Hwp, Doc, PDF)", 
     topicLabel: "Onderwerp", topicPh: "Bijv: Kernconcepten", targetLabel: "Doelgroep", targetPh: "Bijv: Studenten",
     obj: "Meerkeuze", mcqTypeLabel: "Type Meerkeuze", mcqTypeOX: "Waar/Niet waar (O/X)", mcqType4: "4 Opties", mcqType5: "5 Opties",
     subj: "Open vragen", btn: "Genereer {n} vragen", loading: "Genereren...", alertTopic: "Voer een onderwerp in.", alertTarget: "Voer doelgroep in.",
@@ -166,7 +166,7 @@ const TEXTS: Record<string, any> = {
     shareTitle: "Delen", copyLink: "Link kopiëren", copied: "Gekopieerd!", downloadQr: "Download QR", qObj: "[Meerkeuze]", qSubj: "[Open]"
   },
   uk: { 
-    back: "Назад", title: "Конвертація документів", filePh: "Натисніть, щоб прикріпити", 
+    back: "Назад", title: "Конвертація документів (Hwp, Doc, PDF)", filePh: "Натисніть, щоб прикріпити (Hwp, Doc, PDF)", 
     topicLabel: "Тема", topicPh: "Наприклад: Ключові концепції", targetLabel: "Аудиторія", targetPh: "Наприклад: Студенти",
     obj: "Тест", mcqTypeLabel: "Тип тесту", mcqTypeOX: "Правда/Брехня (O/X)", mcqType4: "4 Варіанти", mcqType5: "5 Варіантів",
     subj: "Відкриті", btn: "Створити {n} питань", loading: "Створення...", alertTopic: "Введіть тему.", alertTarget: "Введіть аудиторію.",
@@ -174,7 +174,7 @@ const TEXTS: Record<string, any> = {
     shareTitle: "Поділитися", copyLink: "Копіювати посилання", copied: "Скопійовано!", downloadQr: "Завантажити QR", qObj: "[Тест]", qSubj: "[Відкрите]"
   },
   ms: { 
-    back: "Kembali", title: "Penukaran Dokumen", filePh: "Klik untuk melampirkan", 
+    back: "Kembali", title: "Penukaran Dokumen (Hwp, Doc, PDF)", filePh: "Klik untuk melampirkan (Hwp, Doc, PDF)", 
     topicLabel: "Topik", topicPh: "Contoh: Konsep utama", targetLabel: "Sasaran", targetPh: "Contoh: Pelajar",
     obj: "Pilihan ganda", mcqTypeLabel: "Jenis Pilihan", mcqTypeOX: "Betul/Salah (O/X)", mcqType4: "4 Pilihan", mcqType5: "5 Pilihan",
     subj: "Esei", btn: "Jana {n} soalan", loading: "Menjana...", alertTopic: "Masukkan topik.", alertTarget: "Masukkan sasaran.",
@@ -194,7 +194,6 @@ function Mode3Content() {
   const [file, setFile] = useState<File | null>(null);
   
   const [objCount, setObjCount] = useState(5);
-  // 객관식 유형 선택 상태 추가 (ox, 4, 5)
   const [mcqType, setMcqType] = useState('4'); 
   const [subjCount, setSubjCount] = useState(2);
   
@@ -203,9 +202,16 @@ function Mode3Content() {
   const [errorMsg, setErrorMsg] = useState('');
   const [isCopied, setIsCopied] = useState(false);
 
-  const qrRef = useRef<HTMLDivElement>(null);
+  // 추가된 상태 및 함수
+  const [isSubmitted, setIsSubmitted] = useState(false);                                                
+  const handleSubmitSurvey = () => {
+    alert("설문이 성공적으로 제출되었습니다!");
+    setIsSubmitted(true);
+  };
 
-  const shareUrl = 'https://ai-survey-platform-gamma.vercel.app';
+  const qrRef = useRef<HTMLDivElement>(null);
+  
+  const shareUrl = typeof window !== 'undefined' ? window.location.href : 'http://localhost:3000';
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -259,7 +265,7 @@ function Mode3Content() {
           mimeType,
           fileName: file.name,
           mcqCount: objCount,
-          mcqType, // 선택된 객관식 유형 (ox, 4, 5) API로 전달
+          mcqType,
           subjectiveCount: subjCount,
           lang
         })
@@ -305,7 +311,7 @@ function Mode3Content() {
   };
 
   return (
-    <div className="max-w-2xl w-full bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
+    <div className="max-w-2xl w-full bg-white p-8 rounded-2xl shadow-sm border border-gray-100 my-auto">
       <button onClick={() => router.push('/')} className="text-gray-500 mb-6 text-sm hover:text-gray-800 flex items-center gap-2">
         &larr; {t.back}
       </button>
@@ -336,24 +342,24 @@ function Mode3Content() {
         </div>
       </div>
 
-      {/* 2. 파일 업로드 영역 */}
+      {/* 2. 파일 업로드 영역 (문구 통일) */}
       <div className="mb-6">
         <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-violet-300 rounded-lg cursor-pointer bg-violet-50 hover:bg-violet-100 transition">
           <div className="flex flex-col items-center justify-center pt-5 pb-6 text-center px-4">
             <UploadCloud className="w-10 h-10 text-violet-500 mb-3"/>
             <p className="mb-2 text-sm text-violet-700 font-semibold">{file ? file.name : t.filePh}</p>
-            <p className="text-xs text-gray-400">지원 형식: PDF, TXT, MD, CSV (텍스트 및 PDF 문서)</p>
+            <p className="text-xs text-gray-400">지원 형식: Hwp, Doc, PDF (문서 파일)</p>
           </div>
           <input 
             type="file" 
             className="hidden" 
-            accept=".pdf,.txt,.md,.csv,application/pdf,text/plain" 
+            accept=".hwp,.doc,.docx,.pdf,application/pdf" 
             onChange={handleFileChange} 
           />
         </label>
       </div>
 
-      {/* 3. 객관식 유형 -> 문항 수 -> 주관식 수 설정 영역으로 순서 변경 */}
+      {/* 3. 객관식 유형 -> 문항 수 -> 주관식 수 설정 영역 */}
       <div className="flex flex-col sm:flex-row gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200 mb-6">
         <div className="flex-1">
           <label className="block text-sm font-semibold text-gray-700 mb-1">{t.mcqTypeLabel}</label>
@@ -384,9 +390,10 @@ function Mode3Content() {
         </div>
       )}
 
+      {/* 제출 버튼 항상 노출 및 조건 완화 (원할 경우 파일만 필수가 아니게 검증할 수도 있으나 기존 로직 유지) */}
       <button 
         onClick={handleGenerate} 
-        disabled={isLoading || !file} 
+        disabled={isLoading} 
         className="w-full bg-violet-600 text-white font-bold py-3 rounded-lg hover:bg-violet-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed flex justify-center items-center gap-2"
       >
         {isLoading ? (
@@ -403,7 +410,6 @@ function Mode3Content() {
       {surveyData.length > 0 && (
         <div className="mt-8 pt-8 border-t border-gray-200">
           
-          {/* 링크 및 QR 배포 패널 */}
           <div className="mb-8 p-6 bg-violet-50 rounded-xl border border-violet-100">
             <h2 className="text-lg font-bold text-violet-900 mb-4 flex items-center gap-2">
               <QrCode className="w-5 h-5 text-violet-600"/>
@@ -444,7 +450,6 @@ function Mode3Content() {
             </div>
           </div>
 
-          {/* 설문 미리보기 */}
           <h2 className="text-xl font-bold text-gray-900 mb-4">{t.preview}</h2>
           <div className="space-y-6">
             {surveyData.map((item, index) => (
@@ -479,6 +484,17 @@ function Mode3Content() {
               </div>
             ))}
           </div>
+
+          {/* 설문 미리보기 목록 끝난 직후에 추가된 제출 버튼 영역 */}
+          <div className="mt-8">
+            <button
+              onClick={handleSubmitSurvey}
+              disabled={isSubmitted}
+              className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg transition disabled:bg-gray-400"
+            >
+              {isSubmitted ? "제출 완료되었습니다." : "설문 응답 제출하기"}
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -487,7 +503,7 @@ function Mode3Content() {
 
 export default function CreateMode3() {
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center py-12 px-4 sm:px-6 lg:px-8 font-sans">
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-start py-12 px-4 sm:px-6 lg:px-8 font-sans">
       <Suspense fallback={<div className="w-8 h-8 border-4 border-violet-500 border-t-transparent rounded-full animate-spin"></div>}>
         <Mode3Content/>
       </Suspense>

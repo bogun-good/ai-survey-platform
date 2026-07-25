@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, Suspense, useRef } from 'react';
+import { useState, Suspense, useRef, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Copy, Check, QrCode, Download } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
@@ -41,16 +41,22 @@ function Mode2Content() {
   const t = TEXTS[lang] || TEXTS['ko'];
 
   const [draftText, setDraftText] = useState('');
-  const [objType, setObjType] = useState('4'); // 기본값 4지 선다형
+  const [objType, setObjType] = useState('4'); 
   const [objCount, setObjCount] = useState(3);
   const [subjCount, setSubjCount] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [surveyData, setSurveyData] = useState<any[]>([]);
   const [isCopied, setIsCopied] = useState(false);
-
   const qrRef = useRef<HTMLDivElement>(null);
- 
-  const shareUrl = 'https://ai-survey-platform-gamma.vercel.app';
+  
+  // ----------------------------------------------------
+  // 2. 수정된 부분: shareUrl을 상태(state)로 관리합니다.
+  const [shareUrl, setShareUrl] = useState('');
+
+  // 3. 수정된 부분: 화면이 완전히 렌더링된 후(클라이언트)에 브라우저 URL을 가져옵니다.
+  useEffect(() => {
+    setShareUrl(window.location.href);
+  }, []);
 
   const handleGenerate = async () => {
     if (!draftText) return alert(t.alert1);
@@ -65,7 +71,7 @@ function Mode2Content() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           draftText,
-          mcqType: objType, // 객관식 문항 유형 추가 전송
+          mcqType: objType, 
           mcqCount: objCount,
           subjectiveCount: subjCount,
           lang
@@ -153,11 +159,9 @@ function Mode2Content() {
         )}
       </button>
 
-      {/* 설문 생성 완료 후 공유 패널 및 미리보기 */}
       {surveyData.length > 0 && (
         <div className="mt-8 pt-8 border-t border-gray-200">
           
-          {/* 링크 및 QR 배포 영역 */}
           <div className="mb-8 p-6 bg-emerald-50 rounded-xl border border-emerald-100">
             <h2 className="text-lg font-bold text-emerald-900 mb-4 flex items-center gap-2">
               <QrCode className="w-5 h-5 text-emerald-600"/>
@@ -169,7 +173,7 @@ function Mode2Content() {
                 <QRCodeCanvas value={shareUrl} size={130} level={"H"} includeMargin={true} />
                 <button 
                   onClick={handleDownloadQR} 
-                  className="mt-2 text-xs text-emerald-700 hover:text-emerald-900 font-semibold flex items-center gap-1"
+                  className="mt-2 text-xs text-emerald-700 hover:text-emerald-900 font-semibold flex items-center gap-1 cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5"/> {t.downloadQr}
                 </button>
@@ -201,22 +205,55 @@ function Mode2Content() {
           <h2 className="text-xl font-bold text-gray-900 mb-4">{t.preview}</h2>
           <div className="space-y-6">
             {surveyData.map((item, index) => (
-              <div key={index} className="bg-gray-50 p-5 rounded-lg border border-gray-200">
-                <p className="font-semibold text-gray-800 mb-3">Q{index + 1}. {item.question}</p>
-                {item.type === 'radio' && (
-                  <div className="space-y-2">
+              <div key={index} className="bg-gray-50 p-5 rounded-lg border border-gray-200 shadow-sm">
+                <p className="font-semibold text-gray-800 mb-4 flex items-start gap-2">
+                  <span className="bg-emerald-100 text-emerald-800 px-2 py-1 rounded text-xs font-bold whitespace-nowrap">
+                    {item.type === 'radio' ? t.obj : t.subj}
+                  </span>
+                  <span className="pt-0.5">Q{index + 1}. {item.question}</span>
+                </p>
+                {item.type === 'radio' && item.options && (
+                  <div className="space-y-3 mt-4 ml-2">
                     {item.options.map((opt: string, i: number) => (
-                      <label key={i} className="flex items-center space-x-2 text-sm text-gray-700 cursor-pointer">
-                        <input type="radio" name={`q${index}`} className="text-emerald-600 focus:ring-emerald-500" />
+                      <label key={i} className="flex items-center space-x-3 text-sm text-gray-700 cursor-pointer p-2 hover:bg-white rounded border border-transparent hover:border-gray-200 transition">
+                        <input type="radio" name={`q${index}`} className="w-4 h-4 text-emerald-600 border-gray-300 focus:ring-emerald-500" />
                         <span>{opt}</span>
                       </label>
                     ))}
                   </div>
                 )}
-                {item.type === 'textarea' && <textarea className="w-full border border-gray-300 rounded p-3 h-24 text-sm" disabled></textarea>}
+                {item.type === 'textarea' && (
+                  <div className="mt-4">
+                     <textarea className="w-full border border-gray-300 bg-white rounded-lg p-3 h-28 text-sm outline-none resize-none" placeholder="답변을 입력해주세요..."></textarea>
+                  </div>
+                )}
               </div>
             ))}
           </div>
+
+          <div className="mt-8 p-6 bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center gap-4">
+            <div className="w-full flex items-center justify-between bg-gray-50 px-4 py-3 rounded-xl border border-gray-200">
+              <span className="text-sm text-gray-600 truncate mr-2">
+                {shareUrl}
+              </span>
+              <button 
+                onClick={handleCopyLink}
+                className="px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors whitespace-nowrap cursor-pointer"
+              >
+                {t.copyLink}
+              </button>
+            </div>
+
+            <button 
+              onClick={() => {
+                alert('설문이 성공적으로 제출되었습니다.');
+              }}
+              className="w-full py-4 bg-emerald-600 text-white font-bold text-base rounded-xl hover:bg-emerald-700 transition-colors shadow-md cursor-pointer"
+            >
+              제출하기
+            </button>
+          </div>
+
         </div>
       )}
     </div>
