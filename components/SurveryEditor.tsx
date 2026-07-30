@@ -94,11 +94,11 @@ export default function SurveryEditor() {
           onChange={(e) => setSelectedLang(e.target.value)}
           style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }}
         >
-          {SUPPORTED_LANGUAGES.map((lang) => (
-            <option key={lang.code} value={lang.code}>
-              {lang.label}
-            </option>
-          ))}
+          {LANGUAGES.map((lang) => (
+          <option key={lang.code} value={lang.code}>
+            {lang.name}
+          </option>
+        ))}
         </select>
       </div>
 
