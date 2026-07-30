@@ -4,8 +4,9 @@ import { useState, Suspense, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { UploadCloud, AlertCircle, Copy, Check, QrCode, Download } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
+import { supabase } from '@/lib/supabase';
+import { SURVEY_MODES } from '../../components/constants';
 
-// 지원 파일 형식 문구를 'Hwp, Doc, PDF'로 통일
 const TEXTS: Record<string, any> = {
   ko: { 
     back: "메인으로 돌아가기", title: "문서 파일(Hwp, Doc, PDF) 업로드 변환", filePh: "클릭하여 문서를 첨부하세요 (Hwp, Doc, PDF)", 
@@ -183,76 +184,76 @@ const TEXTS: Record<string, any> = {
   }
 };
 
+
+
 function Mode3Content() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const lang = searchParams.get('lang') || 'ko';
-  const t = TEXTS[lang] || TEXTS['en'];
+  const t = TEXTS[lang] || TEXTS['ko'];
 
   const [topic, setTopic] = useState('');
   const [target, setTarget] = useState('');
   const [file, setFile] = useState<File | null>(null);
-  
+
   const [objCount, setObjCount] = useState(5);
-  const [mcqType, setMcqType] = useState('4'); 
+  const [mcqType, setMcqType] = useState('4');
   const [subjCount, setSubjCount] = useState(2);
-  
+
   const [isLoading, setIsLoading] = useState(false);
   const [surveyData, setSurveyData] = useState<any[]>([]);
   const [errorMsg, setErrorMsg] = useState('');
   const [isCopied, setIsCopied] = useState(false);
-
-  // 추가된 상태 및 함수
-  const [isSubmitted, setIsSubmitted] = useState(false);                                                
-  const handleSubmitSurvey = () => {
-    alert("설문이 성공적으로 제출되었습니다!");
-    setIsSubmitted(true);
-  };
+  const [shareUrl, setShareUrl] = useState('');
+  const [surveyId, setSurveyId] = useState('');
+  const [isSubmitted, setIsSubmitted] = useState(false);
 
   const qrRef = useRef<HTMLDivElement>(null);
-  
-  const shareUrl = typeof window !== 'undefined' ? window.location.href : 'http://localhost:3000';
+
+  const generateUniqueId = () => {
+    return crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
+    if (e.target.files && e.target.files[0]) {
       setFile(e.target.files[0]);
-      setErrorMsg('');
     }
   };
 
+  const handleSubmitSurvey = () => {
+    alert('설문이 성공적으로 제출되었습니다!');
+    setIsSubmitted(true);
+  };
+
+  // ★ 핵심: 생성 + DB 저장 + URL/QR 생성
   const handleGenerate = async () => {
+    // 주제·대상은 필수로 권장 (파일은 선택)
     if (!topic.trim()) return alert(t.alertTopic);
     if (!target.trim()) return alert(t.alertTarget);
-    if (!file) return alert(t.alert1);
     if (objCount + subjCount === 0) return alert(t.alert2);
-    
-    setIsLoading(true);
-    setSurveyData([]);
-    setErrorMsg('');
-    
-    try {
-      const fileName = file.name.toLowerCase();
-      let fileBase64 = '';
-      let mimeType = 'text/plain';
 
-      if (fileName.endsWith('.pdf')) {
-        mimeType = 'application/pdf';
+    setIsLoading(true);
+    setErrorMsg('');
+    setSurveyData([]);
+    setShareUrl('');
+    setSurveyId('');
+
+    try {
+      let fileBase64 = '';
+      let mimeType = '';
+
+      if (file) {
         fileBase64 = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
+          reader.onload = () => {
+            const res = reader.result as string;
+            const base64Data = res.includes(',') ? res.split(',')[1] : res;
+            resolve(base64Data);
+          };
+          reader.onerror = (err) => reject(err);
           reader.readAsDataURL(file);
-          reader.onload = () => resolve((reader.result as string).split(',')[1]);
-          reader.onerror = error => reject(error);
         });
-      } else {
-        const textContent = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.readAsText(file, 'utf-8');
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = error => reject(error);
-        });
-        
-        fileBase64 = btoa(unescape(encodeURIComponent(textContent)));
-        mimeType = 'text/plain';
+        mimeType = file.type || 'application/pdf';
       }
 
       const response = await fetch('/api/generate-survey', {
@@ -263,7 +264,6 @@ function Mode3Content() {
           target,
           fileBase64,
           mimeType,
-          fileName: file.name,
           mcqCount: objCount,
           mcqType,
           subjectiveCount: subjCount,
@@ -272,27 +272,65 @@ function Mode3Content() {
       });
 
       const result = await response.json();
-      
-      if (result.success && result.data && result.data.questions) {
+
+      if (result.success && result.data?.questions) {
         const formatted = result.data.questions.map((q: any) => ({
           type: q.type === 'mcq' ? 'radio' : 'textarea',
           question: q.question,
           options: q.options || []
         }));
-        setSurveyData(formatted);
-      } else {
-        throw new Error(result.error || 'Server error');
-      }
 
-    } catch (error) {
-      console.error("Generation error:", error);
-      setErrorMsg(t.apiError);
+        const newId = generateUniqueId();
+
+        // ★ 실제 테이블 구조에 맞춘 저장
+        const { error } = await supabase.from('surveys').insert({
+          id: newId,
+          topic,
+          target,
+          lang,
+          questions: formatted,
+          mcq_type: mcqType, // 'ox' | '4' | '5'
+          is_public: true
+        });
+
+        if (error) {
+          console.error('Supabase 저장 오류:', error);
+          setErrorMsg(t.apiError || '저장 중 오류가 발생했습니다.');
+          return;
+        }
+
+        setSurveyId(newId);
+        setSurveyData(formatted);
+
+        // ★ 모드 3 URL 생성
+        try {
+          const base = SURVEY_MODES.upgrade;
+          const urlObject = new URL(base.url);
+
+          // /upgrade → /upgrade/s/{id}
+          let path = urlObject.pathname.replace(/\/$/, '');
+          urlObject.pathname = `${path}/s/${newId}`;
+          urlObject.searchParams.set('lang', lang);
+
+          setShareUrl(urlObject.toString());
+        } catch (err) {
+          console.error('URL 생성 오류:', err);
+          setShareUrl(`https://ai-survey-platform-chi.vercel.app/upgrade/s/${newId}?lang=${lang}`);
+        }
+      } else {
+        setErrorMsg(result.message || t.apiError || '생성 중 오류가 발생했습니다.');
+      }
+    } catch (err) {
+      console.error(err);
+      setErrorMsg(t.apiError || '서버 통신 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
     }
   };
 
+  // ★ 반드시 handleGenerate 바깥에 위치
   const handleCopyLink = () => {
+    if (!shareUrl) return;
     navigator.clipboard.writeText(shareUrl);
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2500);
@@ -304,7 +342,7 @@ function Mode3Content() {
     const imageUri = canvas.toDataURL('image/png');
     const link = document.createElement('a');
     link.href = imageUri;
-    link.download = 'survey-qr-code.png';
+    link.download = `survey-qr-${surveyId || 'code'}.png`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -312,60 +350,65 @@ function Mode3Content() {
 
   return (
     <div className="max-w-2xl w-full bg-white p-8 rounded-2xl shadow-sm border border-gray-100 my-auto">
-      <button onClick={() => router.push('/')} className="text-gray-500 mb-6 text-sm hover:text-gray-800 flex items-center gap-2">
+      <button
+        onClick={() => router.push('/')}
+        className="text-gray-500 mb-6 text-sm hover:text-gray-800 flex items-center gap-2"
+      >
         &larr; {t.back}
       </button>
-      
+
       <h1 className="text-2xl font-bold text-violet-900 mb-6">{t.title}</h1>
-      
-      {/* 1. 주제 및 대상 입력 영역 */}
+
+      {/* 1. 주제 및 대상 입력 */}
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
         <div className="flex-1">
           <label className="block text-sm font-semibold text-gray-700 mb-1">{t.topicLabel}</label>
-          <input 
-            type="text" 
-            className="w-full border p-2.5 rounded-lg outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition" 
-            placeholder={t.topicPh} 
-            value={topic} 
-            onChange={(e) => setTopic(e.target.value)} 
+          <input
+            type="text"
+            className="w-full border p-2.5 rounded-lg outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition"
+            placeholder={t.topicPh}
+            value={topic}
+            onChange={(e) => setTopic(e.target.value)}
           />
         </div>
         <div className="flex-1">
           <label className="block text-sm font-semibold text-gray-700 mb-1">{t.targetLabel}</label>
-          <input 
-            type="text" 
-            className="w-full border p-2.5 rounded-lg outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition" 
-            placeholder={t.targetPh} 
-            value={target} 
-            onChange={(e) => setTarget(e.target.value)} 
+          <input
+            type="text"
+            className="w-full border p-2.5 rounded-lg outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition"
+            placeholder={t.targetPh}
+            value={target}
+            onChange={(e) => setTarget(e.target.value)}
           />
         </div>
       </div>
 
-      {/* 2. 파일 업로드 영역 (문구 통일) */}
+      {/* 2. 파일 업로드 */}
       <div className="mb-6">
         <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-violet-300 rounded-lg cursor-pointer bg-violet-50 hover:bg-violet-100 transition">
           <div className="flex flex-col items-center justify-center pt-5 pb-6 text-center px-4">
-            <UploadCloud className="w-10 h-10 text-violet-500 mb-3"/>
-            <p className="mb-2 text-sm text-violet-700 font-semibold">{file ? file.name : t.filePh}</p>
+            <UploadCloud className="w-10 h-10 text-violet-500 mb-3" />
+            <p className="mb-2 text-sm text-violet-700 font-semibold">
+              {file ? file.name : t.filePh}
+            </p>
             <p className="text-xs text-gray-400">지원 형식: Hwp, Doc, PDF (문서 파일)</p>
           </div>
-          <input 
-            type="file" 
-            className="hidden" 
-            accept=".hwp,.doc,.docx,.pdf,application/pdf" 
-            onChange={handleFileChange} 
+          <input
+            type="file"
+            className="hidden"
+            accept=".hwp,.doc,.docx,.pdf,application/pdf"
+            onChange={handleFileChange}
           />
         </label>
       </div>
 
-      {/* 3. 객관식 유형 -> 문항 수 -> 주관식 수 설정 영역 */}
+      {/* 3. 문항 설정 */}
       <div className="flex flex-col sm:flex-row gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200 mb-6">
         <div className="flex-1">
           <label className="block text-sm font-semibold text-gray-700 mb-1">{t.mcqTypeLabel}</label>
-          <select 
-            className="w-full border p-2 rounded-lg bg-white outline-none focus:ring-2 focus:ring-violet-500" 
-            value={mcqType} 
+          <select
+            className="w-full border p-2 rounded-lg bg-white outline-none focus:ring-2 focus:ring-violet-500"
+            value={mcqType}
             onChange={(e) => setMcqType(e.target.value)}
           >
             <option value="ox">{t.mcqTypeOX}</option>
@@ -375,25 +418,36 @@ function Mode3Content() {
         </div>
         <div className="flex-1">
           <label className="block text-sm font-semibold text-gray-700 mb-1">{t.obj}</label>
-          <input type="number" min="0" className="w-full border p-2 rounded-lg" value={objCount} onChange={(e) => setObjCount(Number(e.target.value))} />
+          <input
+            type="number"
+            min="0"
+            className="w-full border p-2 rounded-lg"
+            value={objCount}
+            onChange={(e) => setObjCount(Number(e.target.value))}
+          />
         </div>
         <div className="flex-1">
           <label className="block text-sm font-semibold text-gray-700 mb-1">{t.subj}</label>
-          <input type="number" min="0" className="w-full border p-2 rounded-lg" value={subjCount} onChange={(e) => setSubjCount(Number(e.target.value))} />
+          <input
+            type="number"
+            min="0"
+            className="w-full border p-2 rounded-lg"
+            value={subjCount}
+            onChange={(e) => setSubjCount(Number(e.target.value))}
+          />
         </div>
       </div>
 
       {errorMsg && (
         <div className="mb-6 p-4 bg-red-50 text-red-700 text-sm rounded-lg flex items-start gap-2">
-          <AlertCircle className="w-5 h-5 flex-shrink-0"/>
+          <AlertCircle className="w-5 h-5 flex-shrink-0" />
           <p>{errorMsg}</p>
         </div>
       )}
 
-      {/* 제출 버튼 항상 노출 및 조건 완화 (원할 경우 파일만 필수가 아니게 검증할 수도 있으나 기존 로직 유지) */}
-      <button 
-        onClick={handleGenerate} 
-        disabled={isLoading} 
+      <button
+        onClick={handleGenerate}
+        disabled={isLoading}
         className="w-full bg-violet-600 text-white font-bold py-3 rounded-lg hover:bg-violet-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed flex justify-center items-center gap-2"
       >
         {isLoading ? (
@@ -406,24 +460,27 @@ function Mode3Content() {
         )}
       </button>
 
-      {/* 설문 생성 완료 후 공유 및 미리보기 영역 */}
+      {/* 생성 완료 후 공유 & 미리보기 */}
       {surveyData.length > 0 && (
         <div className="mt-8 pt-8 border-t border-gray-200">
-          
+          {/* 공유 & QR 영역 */}
           <div className="mb-8 p-6 bg-violet-50 rounded-xl border border-violet-100">
             <h2 className="text-lg font-bold text-violet-900 mb-4 flex items-center gap-2">
-              <QrCode className="w-5 h-5 text-violet-600"/>
+              <QrCode className="w-5 h-5 text-violet-600" />
               {t.shareTitle}
             </h2>
-            
+
             <div className="flex flex-col sm:flex-row items-center gap-6">
-              <div ref={qrRef} className="bg-white p-3 rounded-lg shadow-sm border border-violet-200 flex flex-col items-center">
+              <div
+                ref={qrRef}
+                className="bg-white p-3 rounded-lg shadow-sm border border-violet-200 flex flex-col items-center"
+              >
                 <QRCodeCanvas value={shareUrl} size={130} level={"H"} includeMargin={true} />
-                <button 
-                  onClick={handleDownloadQR} 
+                <button
+                  onClick={handleDownloadQR}
                   className="mt-2 text-xs text-violet-700 hover:text-violet-900 font-semibold flex items-center gap-1"
                 >
-                  <Download className="w-3.5 h-3.5"/> {t.downloadQr}
+                  <Download className="w-3.5 h-3.5" /> {t.downloadQr}
                 </button>
               </div>
 
@@ -432,17 +489,17 @@ function Mode3Content() {
                   생성된 설문 링크를 복사하여 메신저로 공유하거나, QR 코드를 다운로드하여 인쇄물에 삽입하세요.
                 </p>
                 <div className="flex items-center gap-2">
-                  <input 
-                    type="text" 
-                    readOnly 
-                    value={shareUrl} 
+                  <input
+                    type="text"
+                    readOnly
+                    value={shareUrl}
                     className="w-full bg-white border border-violet-200 rounded-lg px-3 py-2 text-xs text-gray-600 outline-none"
                   />
-                  <button 
+                  <button
                     onClick={handleCopyLink}
                     className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap"
                   >
-                    {isCopied ? <Check className="w-4 h-4"/> : <Copy className="w-4 h-4"/>}
+                    {isCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                     {isCopied ? t.copied : t.copyLink}
                   </button>
                 </div>
@@ -450,6 +507,7 @@ function Mode3Content() {
             </div>
           </div>
 
+          {/* 미리보기 */}
           <h2 className="text-xl font-bold text-gray-900 mb-4">{t.preview}</h2>
           <div className="space-y-6">
             {surveyData.map((item, index) => (
@@ -458,41 +516,50 @@ function Mode3Content() {
                   <span className="bg-violet-100 text-violet-800 px-2 py-1 rounded text-xs font-bold whitespace-nowrap">
                     {item.type === 'radio' ? t.qObj : t.qSubj}
                   </span>
-                  <span className="pt-0.5">Q{index + 1}. {item.question}</span>
+                  <span className="pt-0.5">
+                    Q{index + 1}. {item.question}
+                  </span>
                 </p>
-                
+
                 {item.type === 'radio' && item.options && (
                   <div className="space-y-3 mt-4 ml-2">
                     {item.options.map((opt: string, i: number) => (
-                      <label key={i} className="flex items-center space-x-3 text-sm text-gray-700 cursor-pointer p-2 hover:bg-white rounded border border-transparent hover:border-gray-200 transition">
-                        <input type="radio" name={`q${index}`} className="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500" />
+                      <label
+                        key={i}
+                        className="flex items-center space-x-3 text-sm text-gray-700 cursor-pointer p-2 hover:bg-white rounded border border-transparent hover:border-gray-200 transition"
+                      >
+                        <input
+                          type="radio"
+                          name={`q${index}`}
+                          className="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500"
+                        />
                         <span>{opt}</span>
                       </label>
                     ))}
                   </div>
                 )}
-                
+
                 {item.type === 'textarea' && (
                   <div className="mt-4">
-                    <textarea 
-                      className="w-full border border-gray-300 rounded-lg p-3 h-28 text-sm bg-white focus:ring-2 focus:ring-violet-500 focus:border-violet-500 outline-none resize-none" 
+                    <textarea
+                      className="w-full border border-gray-300 rounded-lg p-3 h-28 text-sm bg-white focus:ring-2 focus:ring-violet-500 focus:border-violet-500 outline-none resize-none"
                       placeholder="Type answer here..."
                       disabled
-                    ></textarea>
+                    />
                   </div>
                 )}
               </div>
             ))}
           </div>
 
-          {/* 설문 미리보기 목록 끝난 직후에 추가된 제출 버튼 영역 */}
+          {/* 제출 버튼 */}
           <div className="mt-8">
             <button
               onClick={handleSubmitSurvey}
               disabled={isSubmitted}
               className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg transition disabled:bg-gray-400"
             >
-              {isSubmitted ? "제출 완료되었습니다." : "설문 응답 제출하기"}
+              {isSubmitted ? '제출 완료되었습니다.' : '설문 응답 제출하기'}
             </button>
           </div>
         </div>
@@ -504,8 +571,12 @@ function Mode3Content() {
 export default function CreateMode3() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-start py-12 px-4 sm:px-6 lg:px-8 font-sans">
-      <Suspense fallback={<div className="w-8 h-8 border-4 border-violet-500 border-t-transparent rounded-full animate-spin"></div>}>
-        <Mode3Content/>
+      <Suspense
+        fallback={
+          <div className="w-8 h-8 border-4 border-violet-500 border-t-transparent rounded-full animate-spin"></div>
+        }
+      >
+        <Mode3Content />
       </Suspense>
     </div>
   );

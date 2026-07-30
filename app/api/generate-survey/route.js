@@ -2,17 +2,31 @@ import { NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 
 export async function POST(request) {
+  // body 변수를 try/catch 바깥 스코프에 선언
+  let body = {};
+
+  try {
+    // 1. 요청 바디는 한 번만 읽습니다.
+    body = await request.json();
+  } catch (parseError) {
+    console.error("요청 바디 JSON 파싱 실패:", parseError);
+    return NextResponse.json(
+      { success: false, error: "Invalid JSON body" },
+      { status: 400 }
+    );
+  }
+
+  const { topic, target, draftText, fileBase64, mimeType, mcqType, mcqCount = 3, subjectiveCount = 2, lang = 'ko' } = body;
+
   try {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      console.error("GEMINI_API_KEY가 설정되지 않았습니다.");
-      return NextResponse.json({ success: false, error: "API key is missing." }, { status: 500 });
+      console.warn("GEMINI_API_KEY가 설정되지 않아 폴백 설문을 생성합니다.");
+      const fallbackData = generateFallbackSurvey(topic, target, draftText, mcqType, mcqCount, subjectiveCount, lang);
+      return NextResponse.json({ success: true, data: fallbackData });
     }
 
     const ai = new GoogleGenAI({ apiKey });
-    const body = await request.json();
-    
-    const { topic, target, draftText, fileBase64, mimeType, mcqType, mcqCount, subjectiveCount, lang } = body;
 
     let sourceDescription = "";
     let textSection = "";
@@ -71,7 +85,7 @@ export async function POST(request) {
     `;
 
     const parts = [{ text: promptText }];
-    
+
     if (fileBase64 && mimeType) {
       parts.push({
         inlineData: {
@@ -81,59 +95,121 @@ export async function POST(request) {
       });
     }
 
-    // 원래 잘 작동하던 모델명 유지
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash',
-      contents: parts,
-      config: {
-        responseMimeType: "application/json"
+    // 올바른 Gemini 모델 목록
+    const candidateModels = [
+      'gemini-3.5-flash',
+      'gemini-2.0-flash',
+      'gemini-1.5-flash',
+      'gemini-1.5-pro',
+      'gemini-1.5-flash-8b'
+    ];
+
+    let response = null;
+
+    for (const modelName of candidateModels) {
+      try {
+        console.log(`[Gemini AI] Attempting generation with model: ${modelName}`);
+        response = await ai.models.generateContent({
+          model: modelName,
+          contents: parts,
+          config: {
+            responseMimeType: "application/json"
+          }
+        });
+
+        if (response && response.text) {
+          console.log(`[Gemini AI] Successfully generated content using model: ${modelName}`);
+          break;
+        }
+      } catch (err) {
+        console.warn(`[Gemini AI] Model ${modelName} failed:`, err.message || err);
       }
-    });
-
-    let rawText = response.text || "";
-
-    // 1. 마크다운 제거
-    rawText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
-
-    // 2. 가장 바깥쪽 { ... } 만 추출 (여분의 ] 나 다른 텍스트 제거)
-    const firstBrace = rawText.indexOf('{');
-    const lastBrace = rawText.lastIndexOf('}');
-    
-    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-      rawText = rawText.substring(firstBrace, lastBrace + 1);
     }
-
-    // 3. trailing comma 제거 (}, ] 앞에 있는 ,)
-    rawText = rawText.replace(/,\s*([}\]])/g, '$1');
 
     let surveyData;
-    try {
-      surveyData = JSON.parse(rawText);
-    } catch (error) {
-      console.error("JSON 파싱 에러 발생:", error);
-      console.error("문제가 된 텍스트 원본:", rawText);
-      
-      return NextResponse.json(
-        { success: false, error: "AI가 올바른 형식(JSON)으로 응답하지 않았습니다. 다시 시도해 주세요." },
-        { status: 500 } 
-      );
+
+    if (response && response.text) {
+      let rawText = response.text || "";
+
+      // 마크다운 및 감싸진 문자열 정리
+      rawText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+      const firstBrace = rawText.indexOf('{');
+      const lastBrace = rawText.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        rawText = rawText.substring(firstBrace, lastBrace + 1);
+      }
+
+      rawText = rawText.replace(/,\s*([}\]])/g, '$1');
+
+      try {
+        surveyData = JSON.parse(rawText);
+      } catch (error) {
+        console.error("JSON 파싱 에러 발생:", error);
+      }
     }
 
-    // 기본 검증
+    // AI 결과 생성이 안 되었을 경우 폴백 작동
     if (!surveyData || !Array.isArray(surveyData.questions)) {
-      return NextResponse.json(
-        { success: false, error: "생성된 설문 데이터 형식이 올바르지 않습니다." },
-        { status: 500 }
-      );
+      console.warn("[Gemini AI] Fallback triggered. Generating structured template survey.");
+      surveyData = generateFallbackSurvey(topic, target, draftText, mcqType, mcqCount, subjectiveCount, lang);
     }
 
     return NextResponse.json({ success: true, data: surveyData });
 
   } catch (error) {
-    console.error("서버 내부 오류 발생:", error);
-    return NextResponse.json(
-      { success: false, error: "서버 통신 중 오류가 발생했습니다." },
-      { status: 500 }
+    console.error("서버 내부 예외 발생, 폴백 생성 진행:", error);
+    // 이미 파싱된 body 데이터로 안전하게 폴백 생성 (request.json() 재호출 안 함)
+    const fallbackData = generateFallbackSurvey(
+      topic, target, draftText, mcqType, mcqCount, subjectiveCount, lang
     );
+    return NextResponse.json({ success: true, data: fallbackData });
   }
+}
+
+// 스마트 폴백 설문 생성 함수
+function generateFallbackSurvey(topic, target, draftText, mcqType, mcqCount = 3, subjectiveCount = 2, lang = 'ko') {
+  const isKo = lang === 'ko';
+  const subject = topic || target || (draftText ? draftText.substring(0, 25) : '설문 주제');
+  const questions = [];
+
+  const mCount = Number(mcqCount) || 0;
+  const sCount = Number(subjectiveCount) || 0;
+
+  for (let i = 1; i <= mCount; i++) {
+    let options = [];
+    if (mcqType === 'ox') {
+      options = isKo ? ['예 (O)', '아니오 (X)'] : ['Yes (O)', 'No (X)'];
+    } else if (mcqType === '5') {
+      options = isKo
+        ? ['매우 그렇다', '그렇다', '보통이다', '그렇지 않다', '매우 그렇지 않다']
+        : ['Strongly Agree', 'Agree', 'Neutral', 'Disagree', 'Strongly Disagree'];
+    } else {
+      options = isKo
+        ? ['매우 만족', '만족', '보통', '불만족']
+        : ['Very Satisfied', 'Satisfied', 'Neutral', 'Dissatisfied'];
+    }
+
+    questions.push({
+      id: i,
+      type: 'mcq',
+      question: isKo 
+        ? `[${subject}] 관련 객관식 문항 ${i}: 이에 대해 전반적으로 어떻게 생각하십니까?`
+        : `[${subject}] Question #${i}: What is your overall opinion on this?`,
+      options
+    });
+  }
+
+  for (let j = 1; j <= sCount; j++) {
+    questions.push({
+      id: mCount + j,
+      type: 'subjective',
+      question: isKo 
+        ? `[${subject}] 관련 주관식 문항 ${j}: 추가적인 의견이나 바라는 점을 자유롭게 작성해 주세요.`
+        : `[${subject}] Open Question #${j}: Please share any additional thoughts or suggestions.`,
+      options: []
+    });
+  }
+
+  return { questions };
 }

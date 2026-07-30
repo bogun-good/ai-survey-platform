@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, Suspense, useRef } from 'react';
+import { useState, Suspense, useRef, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Copy, Check, QrCode, Download } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
-
+import { supabase } from '@/lib/supabase';
+import { SURVEY_MODES } from '../../components/constants';
 const TEXTS: Record<string, any> = {
   ko: { 
     back: "메인으로 돌아가기", 
@@ -603,17 +604,24 @@ function Mode1Content() {
   const [isLoading, setIsLoading] = useState(false);
   const [surveyData, setSurveyData] = useState<any[]>([]);
   const [isCopied, setIsCopied] = useState(false);
+  const [shareUrl, setShareUrl] = useState('');           // ★ 추가
+  const [surveyId, setSurveyId] = useState('');           // ★ 추가
 
   const qrRef = useRef<HTMLDivElement>(null);
- 
-  const shareUrl = typeof window !== 'undefined' ? window.location.href : 'http://localhost:3000';
 
-  const handleGenerate = async () => {
+  // 고유 ID 생성 함수
+  const generateUniqueId = () => {
+    return crypto.randomUUID().replace(/-/g, '').slice(0, 12); // 예: a8f3k2m9b1c4
+  };
+
+    const handleGenerate = async () => {
     if (!topic || !target) return alert(t.alert1);
     if (objCount + subjCount === 0) return alert(t.alert2);
     
     setIsLoading(true);
     setSurveyData([]);
+    setShareUrl('');
+    setSurveyId('');
     
     try {
       const response = await fetch('/api/generate-survey', {
@@ -630,25 +638,61 @@ function Mode1Content() {
       });
 
       const result = await response.json();
-      if (result.success && result.data && result.data.questions) {
+      
+      if (result.success && result.data?.questions) {
         const formatted = result.data.questions.map((q: any) => ({
           type: q.type === 'mcq' ? 'radio' : 'textarea',
           question: q.question,
           options: q.options || []
         }));
+
+        const newId = generateUniqueId();
+
+        const { error } = await supabase.from('surveys').insert({
+          id: newId,
+          topic,
+          target,
+          lang,
+          questions: formatted,
+          mcq_type: mcqType,
+          is_public: true,
+        });
+
+        if (error) {
+          console.error('Supabase 저장 오류:', error);
+          alert(t.errServer);
+          return;
+        }
+
+        setSurveyId(newId);
         setSurveyData(formatted);
+
+        // URL 생성
+        try {
+          const base = SURVEY_MODES.create;
+          const urlObject = new URL(base.url);
+          let path = urlObject.pathname.replace(/\/$/, '');
+          urlObject.pathname = `${path}/s/${newId}`;
+          urlObject.searchParams.set('lang', lang);
+          setShareUrl(urlObject.toString());
+        } catch (err) {
+          console.error('URL 생성 오류:', err);
+          setShareUrl(`https://ai-survey-platform-chi.vercel.app/create/s/${newId}?lang=${lang}`);
+        }
       } else {
         alert(t.errGenerate);
       }
-    } catch (error) {
-      console.error(error);
+    } catch (err) {
+      console.error(err);
       alert(t.errServer);
     } finally {
       setIsLoading(false);
     }
-  };
+  };   // ← 여기서 handleGenerate를 반드시 닫아야 합니다!
 
+  // ★ 이제부터 handleGenerate 바깥
   const handleCopyLink = () => {
+    if (!shareUrl) return;
     navigator.clipboard.writeText(shareUrl);
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2500);
@@ -660,12 +704,13 @@ function Mode1Content() {
     const imageUri = canvas.toDataURL('image/png');
     const link = document.createElement('a');
     link.href = imageUri;
-    link.download = 'survey-qr-code.png';
+    link.download = `survey-qr-${surveyId || 'code'}.png`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
+  
   return (
     <div className="max-w-2xl w-full bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
       <button onClick={() => router.push('/')} className="text-gray-500 mb-6 text-sm hover:text-gray-800 flex items-center gap-2">

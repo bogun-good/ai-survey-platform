@@ -1,9 +1,12 @@
 'use client';
 
-import { useState, Suspense, useRef, useEffect } from 'react';
+import { useState, Suspense, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Copy, Check, QrCode, Download } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
+import { supabase } from '@/lib/supabase';
+import { SURVEY_MODES } from '../../components/constants';
+
 
 const TEXTS: Record<string, any> = {
   ko: { 
@@ -34,6 +37,7 @@ const TEXTS: Record<string, any> = {
   ms: { back: "Kembali", title: "Jana via Teks", text: "Draf", textPh: "Tampal teks di sini.", objType: "Jenis Aneka Pilihan", typeOX: "Betul/Salah (O/X)", type4: "4 Pilihan", type5: "5 Pilihan", obj: "Aneka Pilihan", subj: "Esei", btn: "Jana {n} Soalan", loading: "Menganalisis...", alert1: "Masukkan teks.", alert2: "Minimum 1 soalan.", preview: "📋 Pratonton", shareTitle: "🚀 Kongsi Tinjauan", copyLink: "Salin Pautan", copied: "Disalin!", downloadQr: "Muat Turun Kod QR" }
 };
 
+
 function Mode2Content() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -41,63 +45,107 @@ function Mode2Content() {
   const t = TEXTS[lang] || TEXTS['ko'];
 
   const [draftText, setDraftText] = useState('');
-  const [objType, setObjType] = useState('4'); 
+  const [objType, setObjType] = useState('4');
   const [objCount, setObjCount] = useState(3);
   const [subjCount, setSubjCount] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [surveyData, setSurveyData] = useState<any[]>([]);
   const [isCopied, setIsCopied] = useState(false);
-  const qrRef = useRef<HTMLDivElement>(null);
-  
-  // ----------------------------------------------------
-  // 2. 수정된 부분: shareUrl을 상태(state)로 관리합니다.
   const [shareUrl, setShareUrl] = useState('');
+  const [surveyId, setSurveyId] = useState('');
 
-  // 3. 수정된 부분: 화면이 완전히 렌더링된 후(클라이언트)에 브라우저 URL을 가져옵니다.
-  useEffect(() => {
-    setShareUrl(window.location.href);
-  }, []);
+  const qrRef = useRef<HTMLDivElement>(null);
 
+  const generateUniqueId = () => {
+    return crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+  };
+
+  // ★ 핵심: 생성 + DB 저장 + URL/QR 생성
   const handleGenerate = async () => {
-    if (!draftText) return alert(t.alert1);
+    if (!draftText || !draftText.trim()) return alert(t.alert1);
     if (objCount + subjCount === 0) return alert(t.alert2);
-    
+
     setIsLoading(true);
     setSurveyData([]);
-    
+    setShareUrl('');
+    setSurveyId('');
+
     try {
       const response = await fetch('/api/generate-survey', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           draftText,
-          mcqType: objType, 
           mcqCount: objCount,
+          mcqType: objType,
           subjectiveCount: subjCount,
           lang
         })
       });
 
       const result = await response.json();
-      if (result.success && result.data && result.data.questions) {
+
+      if (result.success && result.data?.questions) {
         const formatted = result.data.questions.map((q: any) => ({
           type: q.type === 'mcq' ? 'radio' : 'textarea',
           question: q.question,
           options: q.options || []
         }));
+
+        const newId = generateUniqueId();
+
+        // ★ 실제 테이블 구조에 맞춘 저장
+        // topic/target은 텍스트 모드이므로 초안 일부로 대체
+        const shortTopic = draftText.trim().slice(0, 50) + (draftText.length > 50 ? '...' : '');
+
+        const { error } = await supabase.from('surveys').insert({
+          id: newId,
+          topic: shortTopic || 'Text Draft Survey',
+          target: 'Text Input',
+          lang,
+          questions: formatted,
+          mcq_type: objType,        // 'ox' | '4' | '5'
+          is_public: true,
+        });
+
+        if (error) {
+          console.error('Supabase 저장 오류:', error);
+          alert(t.errServer || '저장 중 오류가 발생했습니다.');
+          return;
+        }
+
+        setSurveyId(newId);
         setSurveyData(formatted);
+
+        // ★ 모드 2 URL 생성
+        try {
+          const base = SURVEY_MODES.textCreate;
+          const urlObject = new URL(base.url);
+
+          // /text-create → /text-create/s/{id}
+          let path = urlObject.pathname.replace(/\/$/, '');
+          urlObject.pathname = `${path}/s/${newId}`;
+          urlObject.searchParams.set('lang', lang);
+
+          setShareUrl(urlObject.toString());
+        } catch (err) {
+          console.error('URL 생성 오류:', err);
+          setShareUrl(`https://ai-survey-platform-chi.vercel.app/text-create/s/${newId}?lang=${lang}`);
+        }
       } else {
-        alert('설문 생성 중 오류가 발생했습니다.');
+        alert(t.errGenerate || '생성 중 오류가 발생했습니다.');
       }
-    } catch (error) {
-      console.error(error);
-      alert('서버 통신 중 오류가 발생했습니다.');
+    } catch (err) {
+      console.error(err);
+      alert(t.errServer || '서버 통신 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
     }
   };
 
+  // ★ 반드시 handleGenerate 바깥에 위치
   const handleCopyLink = () => {
+    if (!shareUrl) return;
     navigator.clipboard.writeText(shareUrl);
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2500);
@@ -109,7 +157,7 @@ function Mode2Content() {
     const imageUri = canvas.toDataURL('image/png');
     const link = document.createElement('a');
     link.href = imageUri;
-    link.download = 'survey-qr-code.png';
+    link.download = `survey-qr-${surveyId || 'code'}.png`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -117,20 +165,30 @@ function Mode2Content() {
 
   return (
     <div className="max-w-2xl w-full bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
-      <button onClick={() => router.push('/')} className="text-gray-500 mb-6 text-sm hover:text-gray-800 flex items-center gap-2">&larr; {t.back}</button>
+      <button
+        onClick={() => router.push('/')}
+        className="text-gray-500 mb-6 text-sm hover:text-gray-800 flex items-center gap-2"
+      >
+        &larr; {t.back}
+      </button>
       <h1 className="text-2xl font-bold text-emerald-900 mb-6">{t.title}</h1>
-      
+
       <div className="mb-4">
         <label className="block text-sm font-semibold text-gray-700 mb-2">{t.text}</label>
-        <textarea placeholder={t.textPh} className="w-full border p-3 rounded-lg h-40 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none" value={draftText} onChange={(e) => setDraftText(e.target.value)} />
+        <textarea
+          placeholder={t.textPh}
+          className="w-full border p-3 rounded-lg h-40 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+          value={draftText}
+          onChange={(e) => setDraftText(e.target.value)}
+        />
       </div>
 
       <div className="flex flex-col md:flex-row gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200 mb-6">
         <div className="flex-1">
           <label className="block text-sm font-semibold text-gray-700 mb-1">{t.objType}</label>
-          <select 
-            className="w-full border p-2 rounded-lg bg-white outline-none focus:ring-2 focus:ring-emerald-500" 
-            value={objType} 
+          <select
+            className="w-full border p-2 rounded-lg bg-white outline-none focus:ring-2 focus:ring-emerald-500"
+            value={objType}
             onChange={(e) => setObjType(e.target.value)}
           >
             <option value="ox">{t.typeOX}</option>
@@ -140,15 +198,33 @@ function Mode2Content() {
         </div>
         <div className="flex-1">
           <label className="block text-sm font-semibold text-gray-700 mb-1">{t.obj}</label>
-          <input type="number" min="0" max="20" className="w-full border p-2 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500" value={objCount} onChange={(e) => setObjCount(Number(e.target.value))} />
+          <input
+            type="number"
+            min="0"
+            max="20"
+            className="w-full border p-2 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500"
+            value={objCount}
+            onChange={(e) => setObjCount(Number(e.target.value))}
+          />
         </div>
         <div className="flex-1">
           <label className="block text-sm font-semibold text-gray-700 mb-1">{t.subj}</label>
-          <input type="number" min="0" max="10" className="w-full border p-2 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500" value={subjCount} onChange={(e) => setSubjCount(Number(e.target.value))} />
+          <input
+            type="number"
+            min="0"
+            max="10"
+            className="w-full border p-2 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500"
+            value={subjCount}
+            onChange={(e) => setSubjCount(Number(e.target.value))}
+          />
         </div>
       </div>
 
-      <button onClick={handleGenerate} disabled={isLoading} className="w-full bg-emerald-600 text-white font-bold py-3 rounded-lg hover:bg-emerald-700 transition disabled:bg-gray-400 cursor-pointer flex justify-center items-center gap-2">
+      <button
+        onClick={handleGenerate}
+        disabled={isLoading}
+        className="w-full bg-emerald-600 text-white font-bold py-3 rounded-lg hover:bg-emerald-700 transition disabled:bg-gray-400 cursor-pointer flex justify-center items-center gap-2"
+      >
         {isLoading ? (
           <>
             <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -161,21 +237,24 @@ function Mode2Content() {
 
       {surveyData.length > 0 && (
         <div className="mt-8 pt-8 border-t border-gray-200">
-          
+          {/* 공유 & QR 영역 */}
           <div className="mb-8 p-6 bg-emerald-50 rounded-xl border border-emerald-100">
             <h2 className="text-lg font-bold text-emerald-900 mb-4 flex items-center gap-2">
-              <QrCode className="w-5 h-5 text-emerald-600"/>
+              <QrCode className="w-5 h-5 text-emerald-600" />
               {t.shareTitle}
             </h2>
-            
+
             <div className="flex flex-col sm:flex-row items-center gap-6">
-              <div ref={qrRef} className="bg-white p-3 rounded-lg shadow-sm border border-emerald-200 flex flex-col items-center">
+              <div
+                ref={qrRef}
+                className="bg-white p-3 rounded-lg shadow-sm border border-emerald-200 flex flex-col items-center"
+              >
                 <QRCodeCanvas value={shareUrl} size={130} level={"H"} includeMargin={true} />
-                <button 
-                  onClick={handleDownloadQR} 
+                <button
+                  onClick={handleDownloadQR}
                   className="mt-2 text-xs text-emerald-700 hover:text-emerald-900 font-semibold flex items-center gap-1 cursor-pointer"
                 >
-                  <Download className="w-3.5 h-3.5"/> {t.downloadQr}
+                  <Download className="w-3.5 h-3.5" /> {t.downloadQr}
                 </button>
               </div>
 
@@ -184,17 +263,17 @@ function Mode2Content() {
                   설문 링크를 복사하여 공유하거나, QR 코드를 다운로드하여 모바일 참여를 유도해 보세요.
                 </p>
                 <div className="flex items-center gap-2">
-                  <input 
-                    type="text" 
-                    readOnly 
-                    value={shareUrl} 
+                  <input
+                    type="text"
+                    readOnly
+                    value={shareUrl}
                     className="w-full bg-white border border-emerald-200 rounded-lg px-3 py-2 text-xs text-gray-600 outline-none"
                   />
-                  <button 
+                  <button
                     onClick={handleCopyLink}
                     className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
                   >
-                    {isCopied ? <Check className="w-4 h-4"/> : <Copy className="w-4 h-4"/>}
+                    {isCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                     {isCopied ? t.copied : t.copyLink}
                   </button>
                 </div>
@@ -202,6 +281,7 @@ function Mode2Content() {
             </div>
           </div>
 
+          {/* 미리보기 */}
           <h2 className="text-xl font-bold text-gray-900 mb-4">{t.preview}</h2>
           <div className="space-y-6">
             {surveyData.map((item, index) => (
@@ -210,13 +290,22 @@ function Mode2Content() {
                   <span className="bg-emerald-100 text-emerald-800 px-2 py-1 rounded text-xs font-bold whitespace-nowrap">
                     {item.type === 'radio' ? t.obj : t.subj}
                   </span>
-                  <span className="pt-0.5">Q{index + 1}. {item.question}</span>
+                  <span className="pt-0.5">
+                    Q{index + 1}. {item.question}
+                  </span>
                 </p>
                 {item.type === 'radio' && item.options && (
                   <div className="space-y-3 mt-4 ml-2">
                     {item.options.map((opt: string, i: number) => (
-                      <label key={i} className="flex items-center space-x-3 text-sm text-gray-700 cursor-pointer p-2 hover:bg-white rounded border border-transparent hover:border-gray-200 transition">
-                        <input type="radio" name={`q${index}`} className="w-4 h-4 text-emerald-600 border-gray-300 focus:ring-emerald-500" />
+                      <label
+                        key={i}
+                        className="flex items-center space-x-3 text-sm text-gray-700 cursor-pointer p-2 hover:bg-white rounded border border-transparent hover:border-gray-200 transition"
+                      >
+                        <input
+                          type="radio"
+                          name={`q${index}`}
+                          className="w-4 h-4 text-emerald-600 border-gray-300 focus:ring-emerald-500"
+                        />
                         <span>{opt}</span>
                       </label>
                     ))}
@@ -224,19 +313,21 @@ function Mode2Content() {
                 )}
                 {item.type === 'textarea' && (
                   <div className="mt-4">
-                     <textarea className="w-full border border-gray-300 bg-white rounded-lg p-3 h-28 text-sm outline-none resize-none" placeholder="답변을 입력해주세요..."></textarea>
+                    <textarea
+                      className="w-full border border-gray-300 bg-white rounded-lg p-3 h-28 text-sm outline-none resize-none"
+                      placeholder="답변을 입력해주세요..."
+                    />
                   </div>
                 )}
               </div>
             ))}
           </div>
 
+          {/* 하단 복사 + 제출 버튼 */}
           <div className="mt-8 p-6 bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center gap-4">
             <div className="w-full flex items-center justify-between bg-gray-50 px-4 py-3 rounded-xl border border-gray-200">
-              <span className="text-sm text-gray-600 truncate mr-2">
-                {shareUrl}
-              </span>
-              <button 
+              <span className="text-sm text-gray-600 truncate mr-2">{shareUrl}</span>
+              <button
                 onClick={handleCopyLink}
                 className="px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors whitespace-nowrap cursor-pointer"
               >
@@ -244,16 +335,13 @@ function Mode2Content() {
               </button>
             </div>
 
-            <button 
-              onClick={() => {
-                alert('설문이 성공적으로 제출되었습니다.');
-              }}
+            <button
+              onClick={() => alert('설문이 성공적으로 제출되었습니다.')}
               className="w-full py-4 bg-emerald-600 text-white font-bold text-base rounded-xl hover:bg-emerald-700 transition-colors shadow-md cursor-pointer"
             >
               제출하기
             </button>
           </div>
-
         </div>
       )}
     </div>
@@ -263,7 +351,9 @@ function Mode2Content() {
 export default function CreateMode2() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center p-8 font-sans">
-      <Suspense fallback={<div>Loading...</div>}><Mode2Content /></Suspense>
+      <Suspense fallback={<div>Loading...</div>}>
+        <Mode2Content />
+      </Suspense>
     </div>
   );
 }

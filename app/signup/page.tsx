@@ -654,6 +654,9 @@ export default function SignupPage() {
     const { name, checked } = e.target;
     setAgreements((prev) => ({ ...prev, [name]: checked }));
   };
+   
+  
+
 
   const handleAllAgreementChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const checked = e.target.checked;
@@ -669,68 +672,102 @@ export default function SignupPage() {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
+const handleSignup = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setError('');
 
-  const handleSignup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
+  // 1. 비밀번호 유효성 검사
+  const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>]).{8,}$/;
+  if (!passwordRegex.test(formData.password)) {
+    setError(t.errPasswordPattern);
+    return;
+  }
 
-    const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>]).{8,}$/;
-    if (!passwordRegex.test(formData.password)) {
-      setError(t.errPasswordPattern);
+  // 2. 비밀번호 일치 검사
+  if (formData.password !== formData.confirmPassword) {
+    setError(t.errPasswordMatch);
+    return;
+  }
+
+  // 3. 약관 동의 검사
+  if (
+    !agreements.termsOfService ||
+    !agreements.privacyPolicy ||
+    !agreements.aiContentNotice ||
+    !agreements.ageRestriction
+  ) {
+    setError(t.errAgreements);
+    return;
+  }
+
+  try {
+    // ★ 실제 Supabase 회원가입
+    const { data, error: supabaseError } = await supabase.auth.signUp({
+      email: formData.email,
+      password: formData.password,
+      options: {
+        data: {
+          agreements: {
+            ...agreements,
+            agreedAt: new Date().toISOString(),
+          },
+        },
+      },
+    });
+
+    if (supabaseError) {
+      console.error('Signup Error:', supabaseError);
+      setError(supabaseError.message || t.errSignup);
       return;
     }
-
-    if (formData.password !== formData.confirmPassword) {
-      setError(t.errPasswordMatch);
-      return;
-    }
-
-    if (!agreements.termsOfService || !agreements.privacyPolicy || !agreements.aiContentNotice || !agreements.ageRestriction) {
-      setError(t.errAgreements);
-      return;
-    }
-
-    try {
-      
-      setIsSuccess(true);
-    } catch (err: any) {
-      setError(t.errSignup);
-    }
+    localStorage.setItem('email', formData.email);
+    setIsSuccess(true);
+  } catch (err: any) {
+    console.error(err);
+    setError(t.errSignup);
+  }
+};
+    
+  // ==========================================
+// 1️⃣ 회원가입 성공 시 화면
+// ==========================================
+if (isSuccess) {
+  const handleDirectLogin = () => {
+    localStorage.setItem('token', `user-token-${Date.now()}`);
+    localStorage.setItem('email', formData.email);
+    alert('로그인 되었습니다!');
+    router.push('/');
   };
 
-  if (!isMounted) {
-    return null;
-  }
-
-  // ==========================================
-  // 1️⃣ 회원가입 성공 시 화면
-  // ==========================================
-  if (isSuccess) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50">
-        <div className="p-10 bg-white border border-gray-200 rounded-xl shadow-sm text-center max-w-md">
-          <h2 className="text-2xl font-bold mb-4 text-gray-900">{t.successTitle}</h2>
-          <p className="text-gray-600 mb-8">{t.successDesc}</p>
-          
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <button 
-              onClick={() => router.push('/')} 
-              className="w-full sm:w-auto px-6 py-2.5 text-sm font-bold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 shadow-sm transition"
-            >
-              {t.homeBtn}
-            </button>
-            <button 
-              onClick={() => router.push('/results')} 
-              className="w-full sm:w-auto px-6 py-2.5 text-sm font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-sm transition"
-            >
-              {t.resultsBtn}
-            </button>
-          </div>
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 p-4">
+      <div className="p-10 bg-white border border-gray-200 rounded-2xl shadow-sm text-center max-w-md w-full">
+        <h2 className="text-2xl font-bold mb-3 text-gray-900">
+          회원가입이 완료되었습니다!
+        </h2>
+        
+        <p className="text-sm text-gray-600 mb-6">
+          계정이 정상적으로 등록되었습니다. 바로 서비스를 이용하실 수 있습니다.
+        </p>
+        
+        <div className="flex flex-col gap-3">
+          <button 
+            onClick={handleDirectLogin} 
+            className="w-full py-3 text-sm font-bold text-white bg-blue-600 rounded-xl hover:bg-blue-700 shadow-sm transition cursor-pointer"
+          >
+            바로 서비스 시작하기 (자동 로그인)
+          </button>
+          <button 
+            onClick={() => router.push('/login')} 
+            className="w-full py-3 text-sm font-bold text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 shadow-sm transition cursor-pointer"
+          >
+            로그인 페이지로 이동
+          </button>
         </div>
       </div>
-    );
-  }
-
+    </div>
+  );
+}
   // ==========================================
   // 2️⃣ 회원가입 입력 폼
   // ==========================================
